@@ -7,4 +7,5 @@ file structure looks like this:
 2. For weeks with coding practice, there will also be a "coding practice" file (using code from the texts read) formatted like this example: "Wk1.Coding"
 
 Name: Christina Nguyen
+
 Student number: 1004366223         
