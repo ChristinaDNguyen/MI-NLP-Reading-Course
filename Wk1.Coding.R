@@ -325,6 +325,39 @@ tidy_books %>%
   comparison.cloud(colors = c("gray20", "gray80"),
                    max.words = 100)
 
+PandP_sentences <- data_frame(text = prideprejudice) %>%
+  unnest_tokens(sentence, text, token = "sentences")
+PandP_sentences$sentence[4]
+
+austen_chapters <- austen_books() %>%
+  group_by(book) %>%
+  unnest_tokens(chapter, text, token = "regex",
+                pattern = "Chapter|CHAPTER [\\dIVXLC]") %>%
+  ungroup()
+austen_chapters %>%
+  group_by(book) %>%
+  summarise(chapters = n())
+
+#Let's get ratios though - easier to compare
+
+bingnegative <- get_sentiments("bing") %>%
+  filter(sentiment == "negative")
+wordcounts <- tidy_books %>%
+  group_by(book, chapter) %>%
+  summarize(words = n())
+tidy_books %>%
+  semi_join(bingnegative) %>%
+  group_by(book, chapter) %>%
+  summarize(negativewords = n()) %>%
+  left_join(wordcounts, by = c("book", "chapter")) %>%
+  mutate(ratio = negativewords/words) %>%
+  filter(chapter != 0) %>%
+  top_n(1) %>%
+  ungroup()
+
+
+#=============================== CHAPTER 3 ====================================
+
 
 
   
