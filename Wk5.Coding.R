@@ -188,9 +188,24 @@ stemming %>%
   filter(Result %in% c("come", "coming")) %>%
   distinct(`Original word`, Type, Result)
 
-#4.5 Lemmatization instead of stemming ----------------------------------------- THIS SECTION IS INCOMPLETE, ASKED CLASSMATES FOR HELP. SPACY WON'T RUN.
+#4.5 Lemmatization instead of stemming ----------------------------------------- THIS SECTION PREVIOUSLY HAD A MAJOR PROBLEM SOLVED BY ROD. IT'S OK NOW.
 
 #We'll use the package called spacyr to lemmatize 'The Fir-Tree'
+
+# spaCy offers pre-trained models in different sizes (complexity / features) for almost any language. 
+#Note to future self: I had to download and install Python and Anaconda first
+#Basically spacy is a package originally designed for Python, not R,
+#so we have to install Python, and install spacy on Python, before
+#we can do anything with spacyr. Here's a video on how to install spacy on 
+#Python using the pip command 
+#https://www.youtube.com/watch?v=MkSc_ElzL6s&ab_channel=ArtificialintelligenceWithDave
+
+#Yeah, it's confusing, but deal with it, Future Me who's reading these notes
+#and freaking out. Also, don't worry too much. Everything's gonna be fine if you
+#follow the steps.
+
+#In the terminal (NOT console), here's what it looks like C:\Users\chris\Documents>python -m spacy download en
+
 
 library(spacyr)
 
@@ -466,3 +481,206 @@ dim(doc_matrix)
 #5.5 Fairness and word embeddings
 
 #Oh, rest of chapter is non-coding, so I'll stop here.
+
+#Chapter 6: Regression ---------------------------------------------------------
+#Let's start by creating a continuos and numeric outcome from the same US 
+#Supreme Court data we've used before.
+
+library(tidyverse)
+library(scotus)
+scotus_filtered %>%
+  as_tibble()
+#Check how many opinions we have PER DECADE 
+scotus_filtered %>%
+  mutate(year = as.numeric(year),
+         year = 10 * (year %/% 10)) %>%
+  count(year) %>%
+  ggplot(aes(year, n)) +
+  geom_col() +
+  labs(x = "Year", y = "Number of opinions per decade")
+#Welp, that tells us a lot about bias - some years have a lot more opinoins
+#than others, so we have to be careful when interpreting our data, some values
+#weigh more heavily than others
+
+#Now we split our data into training AND testing sets. 
+#Also, convert the year into a numeric value since it was originally stored
+#as a character value
+library(tidymodels)
+set.seed(1234)
+scotus_split <- scotus_filtered %>%
+  mutate(year = as.numeric(year),
+         text = str_remove_all(text, "'")) %>%
+  initial_split()
+scotus_train <- training(scotus_split)
+scotus_test <- testing(scotus_split)
+
+#Let's preprocess/clean the data a bit. There's several steps here.
+
+library(textrecipes)
+scotus_rec <- recipe(year ~ text, data = scotus_train) %>%
+  step_tokenize(text) %>%
+  step_tokenfilter(text, max_tokens = 1e3) %>%
+  step_tfidf(text) %>%
+  step_normalize(all_predictors())
+scotus_rec
+#Now estimate the necessary parameters for each step using the training data and apply
+#the steps to the data. This next step with the bake will take 15+ minutes to run...
+#I know, it sucks, but stick with it, Future Tina.
+
+scotus_prep <- prep(scotus_rec)
+memory.limit()
+memory.limit(30000)
+scotus_bake <- bake(scotus_prep, new_data = NULL)
+dim(scotus_bake)
+#To keep things organized, let's create a workflow() to bundle together with
+#our recipe with any model specifications we may want to create later. The first
+#step in this is to create an empty workflow() and then add the scotus_rec() to it
+
+scotus_wf <- workflow() %>%
+  add_recipe(scotus_rec)
+scotus_wf
+
+svm_spec <- svm_linear() %>%
+  set_mode("regression") %>%
+  set_engine("LiblineaR")
+svm_fit <- scotus_wf %>%
+  add_model(svm_spec) %>%
+  fit(data = scotus_train)
+
+svm_fit %>%
+  pull_workflow_fit() %>%
+  tidy() %>%
+  arrange(-estimate)
+svm_fit %>%
+  pull_workflow_fit() %>%
+  tidy() %>%
+  arrange(estimate)
+
+#10 fold validation
+
+set.seed(123)
+scotus_folds <- vfold_cv(scotus_train)
+scotus_fold
+
+set.seed(123) #seed just creates a unique set of random numbers, remember? 
+svm_rs <- fit_resamples(
+  scotus_wf %>% add_model(svm_spec),
+  scotus_folds,
+  control = control_resamples(save_pred = TRUE)
+)
+svm_rs
+collect_metrics(svm_rs)
+
+#HEre I marked in the textbook what the regression values mean. E.g. r^2.
+#Future Me should check this if Future Me is confused about the numbers.
+
+svm_rs %>%
+  collect_predictions() %>%
+  ggplot(aes(year, .pred, color = id)) +
+  116 6 Regression
+geom_abline(lty = 2, color = "gray80", size = 1.5) +
+  geom_point(alpha = 0.3) +
+  labs(
+    x = "Truth",
+    y = "Predicted year",
+    color = NULL,
+    title = "Predicted and true yrs for SC opinions",
+    subtitle = "Each cross-validation fold is shown in a diff colour"  )
+
+#Another way (way 2 of 3, because way three is the forest model) of testing the model is comparing it agianst the null model. We
+#wil do that here
+null_regression <- null_model() %>%
+  set_engine("parsnip") %>%
+  set_mode("regression")
+null_rs <- fit_resamples(
+  scotus_wf %>% add_model(null_regression),
+  scotus_folds,
+  metrics = metric_set(rmse)
+)
+null_rs
+collect_metrics(null_rs)
+#Well bleepbleepbleep, this model sucks bleep. It's not very accurate
+#and as the textbook says, even our first model was better
+
+#Another way (3 of 3) is the random forest model
+
+rf_spec <- rand_forest(trees = 1000) %>%
+  set_engine("ranger") %>%
+  set_mode("regression")
+rf_spec
+rf_rs <- fit_resamples(
+  scotus_wf %>% add_model(rf_spec),
+  scotus_folds,
+  control = control_resamples(save_pred = TRUE)
+)
+
+collect_metrics(rf_rs) #ask it to tell us the performance values
+#looks good so let suse this
+
+collect_predictions(rf_rs) %>%
+  ggplot(aes(year, .pred, color = id)) +
+  geom_abline(lty = 2, color = "gray80", size = 1.5) +
+  geom_point(alpha = 0.3) +
+  labs(
+    x = "Truth",
+    y = "Predicted year",
+    color = NULL,
+    title = paste("Predicted and true years for SC opinions using",
+                  "a Random Foreast model", sep = "\n"),
+    subtitle = "Each cross-validation fold is shown in a diff colour" )
+
+#6.4 Removing stop words ------------------------------------------------------
+#Well poop, is every variation of any given exercise in this book going to be
+#about removing stop words? :) So it is, and so it shall be!
+#I just love removing stop words!
+
+stopword_rec <- function(stopword_name) {
+  recipe(year ~ text, data = scotus_train) %>%
+    step_tokenize(text) %>%
+    step_stopwords(text, stopword_source = stopword_name) %>%
+    step_tokenfilter(text, max_tokens = 1e3) %>%
+    step_tfidf(text) %>%
+    step_normalize(all_predictors())
+  stopword_rec("snowball")
+  
+  svm_wf <- workflow() %>%
+    add_model(svm_spec)
+  svm_wf
+  
+  #more cross-validation as before using multiple random seeds
+  set.seed(123)
+  snowball_rs <- fit_resamples( svm_wf %>% add_recipe(stopword_rec("snowball")),scotus_folds
+  )
+  set.seed(234)
+  smart_rs <- fit_resamples(
+    svm_wf %>% add_recipe(stopword_rec("smart")),
+    scotus_folds
+  )
+  set.seed(345)
+  stopwords_iso_rs <- fit_resamples(
+    svm_wf %>% add_recipe(stopword_rec("stopwords-iso")),
+    scotus_folds
+  )
+  collect_metrics(smart_rs)
+  library(ggplot2)
+  
+  word_counts <- tibble(name = c("snowball", "smart", "stopwords-iso")) %>%
+    mutate(words = map_int(name, ~length(stopwords::stopwords(source = .))))
+  list(snowball = snowball_rs,
+       smart = smart_rs,
+       `stopwords-iso` = stopwords_iso_rs) %>%
+    map_dfr(show_best, "rmse", .id = "name") %>%
+    left_join(word_counts, by = "name") %>%
+    mutate(name = paste0(name, " (", words, " words)"),
+           name = fct_reorder(name, words)) %>%
+    ggplot(aes(name, mean, color = name)) +
+    geom_crossbar(aes(ymin = mean - std_err, ymax = mean + std_err), alpha = 0.6) +
+    geom_point(size = 3, alpha = 0.8) +
+    theme(legend.position = "none") +
+    labs(x = NULL, y = "RMSE",
+         title = "Model performance for three stop word lexicons",
+         subtitle = "For this data set, the Snowball lexicon performed best")
+  
+  #6.5 Varying n-grams case study ---------------------------------------
+  
+    
