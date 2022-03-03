@@ -1,0 +1,6 @@
+This folder contains the reading notes and code for week 11:
+- Alammar, Jay, 2020, ‘How GPT3 Works - Visualizations and Animations’, 27 July, https://jalammar.github.io/how-gpt3-works-visualizations-animations/
+- Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin, 2017, ‘Attention Is All You Need’, arXiv, http://arxiv.org/abs/1706.03762.
+- Jacob Devlin and Ming-Wei Chang, 2018, ‘Open Sourcing BERT: State-of-the-Art Pre-training for Natural Language Processing’, 2 November, Google AI Blog, https://ai.googleblog.com/2018/11/open-sourcing-bert-state-of-art-pre.html.
+- Jacob Devlin, Ming-Wei Chang, Kenton Lee, Kristina Toutanova, 2018, ‘BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding’, arXiv, https://arxiv.org/abs/1810.04805.
+- Rush, Alexander, 2018, ‘The Annotated Transformer’, https://nlp.seas.harvard.edu/2018/04/03/attention.html
